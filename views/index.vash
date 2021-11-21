@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="/jquery/jquery.min.js"></script>
+
+    <link rel="stylesheet" href="/bootstrap/css/bootstrap.min.css" />
+    <script src="/bootstrap/js/bootstrap.min.js"></script>
+    <script>
+        var rc = {};
+        function Reset() {
+            $('div.card').hide();
+            $('#tblCrs').hide();
+            $('#cmbSem').hide();
+            $('#tblReg').hide();
+        }
+        $(document).ready(function () {
+
+            Reset();
+
+            $('.pbk').keypress(function (e) {
+                if (e.which === 13) {
+                    getStudent();
+                    getSemesters();
+                }
+            })
+
+            $('#semester').change(function () {
+                getCourses()
+            });
+
+            $('body').on('change', '#mchk', function () {
+                $('.chk').prop('checked', $('#mchk').is(':checked'));
+            })
+
+            $('#register').click(function () {
+                var courses = $('#tblCrs > table > tbody > tr').map(function () {
+                    if ($(this).find('td:eq(0) > input:checkbox').is(':checked')) {
+                        return $(this).find('td:eq(0) > input:checkbox').val()
+                    }
+                }).get();
+
+                console.log(courses);
+                addRegistration(courses);
+                showRegistration();
+                getCourses();
+            });
+
+            $('body').on('change', '.grd', function () {
+                var id = $(this).attr('regid');
+                var gradeid = $(this).val();
+
+                updateRegistration(id, gradeid);
+                updateGPA();
+
+            });
+
+
+
+        });
+
+        function getStudent() {
+            var regno = $('#regno').val();
+
+            $.ajax({
+                url: `/student/${regno}`,
+                method: 'GET'
+            }).done(function (student) {
+                console.log(student);
+                $('#studentname').text(student.studentname);
+                $('#fathername').text(student.fathername);
+
+                $('div.card').show();
+
+                showRegistration();
+            });
+        }
+
+        function getSemesters() {
+            $.ajax({
+                url: `/course/semesters`,
+                method: 'GET'
+            }).done(function (semesters) {
+                console.log(semesters);
+                $.each(semesters, function (sindex, sem) {
+                    $('#semester').append(`<option value="${sem}">${sem}</option>`)
+                });
+                $('#cmbSem').show();
+            });
+        }
+
+        function getCourses() {
+            var semno = $('#semester :selected').val();
+
+            $.ajax({
+                url: `/course/${semno}`,
+                method: 'GET'
+            }).done(function (courses) {
+                console.log(courses);
+                var regno = $('#regno').val();
+                $('#tblCrs > table > tbody').empty();
+                $.each(courses, function (cindex, crs) {
+                    var key = `${crs.courseid}-${regno}`
+                    var tr = `
+                    <tr>
+
+                        <td>
+                            ${rc[key] == null
+                            ? `<input type="checkbox" class="chk" value="${crs.courseid}">`
+                            : ``}
+                        </td>
+                        <td>${crs.code}</td>
+                        <td>${crs.title}</td>
+                        <td>${crs.crhr}</td>
+                    </tr>                    
+                    `
+                    $('#tblCrs > table > tbody').append(tr);
+                })
+                $('#tblCrs').show();
+            });
+        }
+
+        function addRegistration(courses) {
+            var regno = $('#regno').val();
+
+            $.ajax({
+                url: `/registration/add`,
+                method: 'POST',
+                data: { 'courses': JSON.stringify(courses), 'regno': regno }
+            }).done(function (regs) {
+                console.log(regs);
+
+            });
+        }
+
+        function showRegistration() {
+            var regno = $('#regno').val();
+
+            $.ajax({
+                url: `/registration/${regno}`,
+                method: 'GET'
+            }).done(function (res) {
+                var [regs, grades, gpa] = res;
+                //console.log(res);
+                if(gpa.length == 0){
+                    gpa=[{GPA:0}];
+                }
+                $('#tblReg > table > tbody').empty();
+                $.each(regs, function (rindex, reg) {
+                    var key = `${reg.courseid}-${regno}`;
+                    rc[key] = 1;
+                    var tr = `
+                    <tr>
+                        <td>${reg.course.code}</td>
+                        <td>${reg.course.title}</td>
+                        <td>${reg.course.crhr}</td>
+                        <td>
+                            <select class="form-control form-control-sm grd" regid="${reg._id}">
+                                <option selected hidden></option>
+                            ${grades.map(grade => `
+                                <option value="${grade.gradeid}" ${getGrade(reg.gradeid, grade.gradeid)}>${grade.grade}</option>
+                            `)}
+                            </select>                            
+                        </td>
+                    </tr>                    
+                    `
+                    $('#tblReg > table > tbody').append(tr);
+                });
+
+                var tr = `
+                <tr>
+                    <td></td>
+                    <td></td>
+                    <td>GPA</td>
+                    <td id="gpa">${Number(gpa[0].GPA).toFixed(2)}</td>
+                </tr>                
+                `
+                $('#tblReg > table > tbody').append(tr);
+
+                console.log(rc)
+            });
+            $('#tblReg').show();
+        }
+
+        function getGrade(r, g) {
+            return r === g ? ` selected` : ``
+        }
+
+        function updateRegistration(id, gradeid) {
+            $.ajax({
+                url: `/registration/update`,
+                method: 'POST',
+                data: { 'id': id, 'gradeid': gradeid }
+            }).done(function (regs) {
+                console.log(regs);
+
+            });
+        }
+
+        function updateGPA() {
+            var regno = $('#regno').val();
+            $.ajax({
+                url: `/registration/gpa/${regno}`,
+                method: 'GET',
+
+            }).done(function (gpa) {
+                console.log(gpa);
+                $('#gpa').text(Number(gpa[0].GPA).toFixed(2))
+            });
+        }
+
+    </script>
+    <title>Data Sheet</title>
+</head>
+
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <a class="navbar-brand" href="#">Student Data Sheet</a>
+        <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNavAltMarkup"
+            aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+            <div class="navbar-nav">
+                <a class="nav-item nav-link active" href="#">Home <span class="sr-only">(current)</span></a>
+                <a class="nav-item nav-link" href="#">Features</a>
+                <a class="nav-item nav-link" href="#">Pricing</a>
+                <a class="nav-item nav-link disabled" href="#" tabindex="-1" aria-disabled="true">Disabled</a>
+            </div>
+        </div>
+    </nav>
+
+    <div style="padding: 25px;">
+
+        <!-- <div class="container"> -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="form-group">
+                    <input type="text" class="form-control pbk" id="regno" placeholder="Reg. No.">
+                </div>
+                <div class="card">
+                    <div class="card-body">
+                        <h5 class="card-title">Student Details</h5>
+                        <h6 class="card-subtitle mb-2 text-info">Student Name</h6>
+                        <p class="card-text" id="studentname"></p>
+                        <h6 class="card-subtitle mb-2 text-info">Father Name</h6>
+                        <p class="card-text" id="fathername"></p>
+
+                    </div>
+                </div>
+                <br>
+                <div class="input-group mb-3" id="cmbSem">
+                    <div class="input-group-prepend">
+                        <label class="input-group-text" for="semester">Semesters</label>
+                    </div>
+                    <select class="custom-select" id="semester">
+                        <option selected hidden>Choose...</option>
+
+                    </select>
+                </div>
+
+                <div id="tblCrs">
+                    <h4 class="text-info">Courses</h4>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>
+                                    <input type="checkbox" id="mchk">
+                                </th>
+                                <th>Code</th>
+                                <th>Title</th>
+                                <th>Cr</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+
+                        </tbody>
+                    </table>
+                    <button type="button" class="btn btn-outline-success" id="register">Register</button>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div id="tblReg">
+                    <h4 class="text-info">Registrations</h4>
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>Code</th>
+                                <th>Title</th>
+                                <th>Cr</th>
+                                <th>Grade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <!-- </div> -->
+
+
+
+
+
+
+
+
+    </div>
+</body>
+
+</html>
